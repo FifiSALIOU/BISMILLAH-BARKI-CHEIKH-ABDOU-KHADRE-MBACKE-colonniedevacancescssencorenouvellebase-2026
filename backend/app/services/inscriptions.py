@@ -240,3 +240,44 @@ def cancel_desistement(*, db: Session, user: User, demande_id: int) -> None:
     db.delete(demande.desistement)
     db.flush()
 
+
+def reinscrire_desiste(*, db: Session, user: User, demande_id: int) -> DemandeInscription:
+    parent = db.query(Parent).filter(Parent.user_id == user.id).first()
+    if not parent:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Parent introuvable.")
+
+    demande = (
+        db.query(DemandeInscription)
+        .join(Enfant, Enfant.id == DemandeInscription.enfant_id)
+        .filter(DemandeInscription.id == demande_id, Enfant.parent_id == parent.id)
+        .first()
+    )
+    if not demande:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demande introuvable.")
+
+    if demande.statut != DemandeStatut.DESISTEE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Réinscription impossible : seul un enfant désisté peut être réinscrit.",
+        )
+
+    if demande.desistement is None or not demande.desistement.validated:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Réinscription impossible : le désistement n'est pas validé.",
+        )
+
+    # Respect strict de l'ordre d'arrivée : le rang devient le dernier + 1
+    new_rang = _next_rang_for_liste(db, demande.liste_id)
+    demande.rang_dans_liste = new_rang
+    demande.statut = DemandeStatut.SOUMISE
+    demande.non_validation_reason = None
+    demande.is_selection_finale = False
+    demande.selected_by_user_id = None
+    demande.selected_at = None
+
+    # On retire le désistement validé pour permettre un futur cycle normal.
+    db.delete(demande.desistement)
+    db.flush()
+    return demande
+
