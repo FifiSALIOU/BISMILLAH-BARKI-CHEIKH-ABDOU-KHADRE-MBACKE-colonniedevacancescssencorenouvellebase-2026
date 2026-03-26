@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { AdminUser, Parent, MOCK_SITES } from '@/data/mockData';
+import { AdminUser, Parent } from '@/data/mockData';
 import { useInscription } from '@/contexts/InscriptionContext';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,7 @@ export default function GestionUtilisateurs() {
   type ParentRow = Parent & { id: string };
   const [admins, setAdmins] = useState<AdminUser[]>([]);
   const [parentRows, setParentRows] = useState<ParentRow[]>([]);
+  const [sites, setSites] = useState<Array<{ id: string; code: string; nom: string }>>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<AdminUser | null>(null);
@@ -115,9 +116,27 @@ export default function GestionUtilisateurs() {
     setParentRows(mapped);
   };
 
+  const fetchSites = async () => {
+    const token = getToken();
+    if (!token) return;
+    const response = await fetch(`${API_BASE_URL}/admin/sites`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return;
+    const data = await response.json().catch(() => []);
+    if (!Array.isArray(data)) return;
+    const mapped = data.map((s: any) => ({
+      id: String(s.id ?? ''),
+      code: String(s.code ?? ''),
+      nom: String(s.nom ?? ''),
+    })).filter((s: { code: string; nom: string }) => s.code && s.nom);
+    setSites(mapped);
+  };
+
   useEffect(() => {
     void fetchAdmins();
     void fetchParents();
+    void fetchSites();
   }, []);
 
   const handleImportParents = async (data: any[]) => {
@@ -309,7 +328,10 @@ export default function GestionUtilisateurs() {
   };
 
   const handleCreateParent = () => {
-    if (!newParentMatricule || !newParentPrenom || !newParentNom || !newParentService || !newParentTelephone) return;
+    if (!newParentMatricule || !newParentPrenom || !newParentNom || !newParentService || !newParentSite || !newParentTelephone) {
+      toast({ title: 'Champs obligatoires', description: 'Matricule, Prénom, Nom, Service, Site et Téléphone sont obligatoires.', variant: 'destructive' });
+      return;
+    }
     const token = getToken();
     if (!token) return;
     void (async () => {
@@ -640,18 +662,18 @@ export default function GestionUtilisateurs() {
         <DialogContent className="sm:max-w-md rounded-xl">
           <DialogHeader><DialogTitle>Nouveau parent / Agent CSS</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2"><Label>Matricule</Label><Input value={newParentMatricule} onChange={e => setNewParentMatricule(e.target.value)} placeholder="CSS-2024-XXX" className="rounded-lg" /></div>
+            <div className="space-y-2"><Label>Matricule *</Label><Input value={newParentMatricule} onChange={e => setNewParentMatricule(e.target.value)} placeholder="CSS-2024-XXX" className="rounded-lg" /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Prénom</Label><Input value={newParentPrenom} onChange={e => setNewParentPrenom(e.target.value)} className="rounded-lg" /></div>
-              <div className="space-y-2"><Label>Nom</Label><Input value={newParentNom} onChange={e => setNewParentNom(e.target.value)} className="rounded-lg" /></div>
+              <div className="space-y-2"><Label>Prénom *</Label><Input value={newParentPrenom} onChange={e => setNewParentPrenom(e.target.value)} className="rounded-lg" /></div>
+              <div className="space-y-2"><Label>Nom *</Label><Input value={newParentNom} onChange={e => setNewParentNom(e.target.value)} className="rounded-lg" /></div>
             </div>
-            <div className="space-y-2"><Label>Service</Label><Input value={newParentService} onChange={e => setNewParentService(e.target.value)} className="rounded-lg" /></div>
+            <div className="space-y-2"><Label>Service *</Label><Input value={newParentService} onChange={e => setNewParentService(e.target.value)} className="rounded-lg" /></div>
             <div className="space-y-2">
-              <Label>Site</Label>
+              <Label>Site *</Label>
               <Select value={newParentSite} onValueChange={setNewParentSite}>
                 <SelectTrigger className="rounded-lg"><SelectValue placeholder="Sélectionner un site" /></SelectTrigger>
                 <SelectContent>
-                  {MOCK_SITES.map(s => (
+                  {sites.map(s => (
                     <SelectItem key={s.id} value={s.code}>{s.nom}</SelectItem>
                   ))}
                 </SelectContent>
@@ -689,7 +711,7 @@ export default function GestionUtilisateurs() {
                 <Select value={editingParent.site || ''} onValueChange={v => setEditingParent({ ...editingParent, site: v })}>
                   <SelectTrigger className="rounded-lg"><SelectValue placeholder="Sélectionner un site" /></SelectTrigger>
                   <SelectContent>
-                    {MOCK_SITES.map(s => (
+                    {sites.map(s => (
                       <SelectItem key={s.id} value={s.code}>{s.nom}</SelectItem>
                     ))}
                   </SelectContent>
