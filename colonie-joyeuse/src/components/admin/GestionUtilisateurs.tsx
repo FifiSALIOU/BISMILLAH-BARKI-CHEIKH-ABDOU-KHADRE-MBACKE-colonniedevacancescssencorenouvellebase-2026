@@ -280,18 +280,16 @@ export default function GestionUtilisateurs() {
   };
 
   const handleResetPassword = () => {
-    if (!resetPwdTarget || !resetNewPwd) return;
+    if (!resetPwdTarget) return;
     if (resetPwdTarget.type === 'admin') {
       const token = getToken();
       if (!token) return;
       void (async () => {
-        const response = await fetch(`${API_BASE_URL}/admin/users/${resetPwdTarget.id}/reset-password`, {
+        const response = await fetch(`${API_BASE_URL}/admin/users/${resetPwdTarget.id}/reset-password-auto`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ new_password: resetNewPwd }),
         });
         if (!response.ok) {
           const data = await response.json().catch(() => ({}));
@@ -300,10 +298,12 @@ export default function GestionUtilisateurs() {
         }
         setResetPwdOpen(false);
         setResetNewPwd('');
-        toast({ title: '✅ Mot de passe réinitialisé' });
+        toast({ title: '✅ Mot de passe temporaire envoyé par email' });
       })();
       return;
-    } else {
+    }
+    if (!resetNewPwd) return;
+    else {
       updateParent(resetPwdTarget.id, { motDePasse: resetNewPwd });
     }
     setResetPwdOpen(false);
@@ -566,11 +566,19 @@ export default function GestionUtilisateurs() {
           <DialogHeader>
             <DialogTitle>Réinitialiser le mot de passe</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">Nouveau mot de passe pour <strong>{resetPwdTarget?.name}</strong></p>
-          <div className="space-y-2">
-            <Label>Nouveau mot de passe</Label>
-            <Input type="password" value={resetNewPwd} onChange={e => setResetNewPwd(e.target.value)} className="rounded-lg" />
-          </div>
+          {resetPwdTarget?.type === 'admin' ? (
+            <p className="text-sm text-muted-foreground">
+              Un mot de passe temporaire sera généré automatiquement et envoyé par email à <strong>{resetPwdTarget?.name}</strong>.
+            </p>
+          ) : (
+            <div>
+              <p className="text-sm text-muted-foreground">Nouveau mot de passe pour <strong>{resetPwdTarget?.name}</strong></p>
+              <div className="space-y-2 mt-2">
+                <Label>Nouveau mot de passe</Label>
+                <Input type="password" value={resetNewPwd} onChange={e => setResetNewPwd(e.target.value)} className="rounded-lg" />
+              </div>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setResetPwdOpen(false)} className="rounded-lg">Annuler</Button>
             <Button onClick={handleResetPassword} className="rounded-lg bg-primary text-primary-foreground">Réinitialiser</Button>

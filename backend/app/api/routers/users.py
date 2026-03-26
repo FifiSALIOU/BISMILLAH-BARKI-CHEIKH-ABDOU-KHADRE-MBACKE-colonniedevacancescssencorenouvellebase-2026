@@ -23,6 +23,7 @@ from app.services.users import (
     change_password_self,
     create_user_superadmin,
     delete_admin_user,
+    set_admin_temp_password,
     set_user_active,
     update_user,
 )
@@ -181,6 +182,43 @@ def reset_password_user(
 ):
     change_password_for_user(db, user_id=user_id, new_password=payload.new_password)
     db.commit()
+    return {"ok": True}
+
+
+@router.post("/{user_id}/reset-password-auto")
+def reset_password_user_auto(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_roles(UserRole.SUPER_ADMIN)),
+):
+    temp_password = _generate_temp_password()
+    user = set_admin_temp_password(db, user_id=user_id, temp_password=temp_password)
+    db.commit()
+
+    if user.email:
+        send_email(
+            to=[user.email],
+            subject="Colonie 2026 — Réinitialisation de votre mot de passe",
+            body=(
+                "Bonjour,\n\n"
+                "Votre mot de passe administrateur a été réinitialisé.\n"
+                f"- Email: {user.email}\n"
+                f"- Mot de passe temporaire: {temp_password}\n\n"
+                "Veuillez vous connecter à l'application en cliquant sur ce lien : Accéder à l'application.\n\n"
+                "À la prochaine connexion, vous serez obligé de changer ce mot de passe.\n"
+                "Cordialement.\n"
+            ),
+            html_body=(
+                "<p>Bonjour,</p>"
+                "<p>Votre mot de passe administrateur a été réinitialisé.<br>"
+                f"- Email: {user.email}<br>"
+                f"- Mot de passe temporaire: {temp_password}</p>"
+                '<p>Veuillez vous connecter à l\'application en cliquant sur ce lien : '
+                '<a href="http://localhost:8080/?force_login=1">Accéder à l\'application</a>.</p>'
+                "<p>À la prochaine connexion, vous serez obligé de changer ce mot de passe.<br>"
+                "Cordialement.</p>"
+            ),
+        )
     return {"ok": True}
 
 

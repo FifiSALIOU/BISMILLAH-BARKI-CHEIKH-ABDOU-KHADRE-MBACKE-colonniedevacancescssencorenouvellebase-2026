@@ -160,6 +160,18 @@ def change_password_for_user(db: Session, *, user_id: int, new_password: str) ->
     db.flush()
 
 
+def set_admin_temp_password(db: Session, *, user_id: int, temp_password: str) -> User:
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Utilisateur introuvable.")
+    if user.role not in {UserRole.GESTIONNAIRE, UserRole.SUPER_ADMIN}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Réinitialisation automatique réservée aux administrateurs.")
+    user.password_hash = hash_password(temp_password)
+    user.must_change_password = True
+    db.flush()
+    return user
+
+
 def change_password_self(db: Session, *, user: User, old_password: str, new_password: str) -> None:
     from app.security import verify_password
 
