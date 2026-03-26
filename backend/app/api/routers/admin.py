@@ -75,6 +75,18 @@ class SwapRangIn(BaseModel):
     other_demande_id: int
 
 
+class ListeConfigIn(BaseModel):
+    code: ListeCode
+    nom: str = Field(min_length=1, max_length=255)
+    description: str | None = None
+
+
+class SiteConfigIn(BaseModel):
+    nom: str = Field(min_length=1, max_length=255)
+    code: str = Field(min_length=1, max_length=50)
+    description: str | None = None
+
+
 @router.get("/settings")
 def get_runtime_settings(
     db: Session = Depends(get_db),
@@ -115,6 +127,133 @@ def list_sites(
         }
         for s in all_sites
     ]
+
+
+@router.post("/sites")
+def create_site(
+    payload: SiteConfigIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.SUPER_ADMIN)),
+):
+    code = payload.code.strip().upper()
+    exists = db.query(Site).filter(Site.code == code).first()
+    if exists:
+        raise HTTPException(status_code=400, detail="Ce code de site existe déjà.")
+    row = Site(nom=payload.nom.strip(), code=code, description=payload.description)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "nom": row.nom, "code": row.code, "description": row.description}
+
+
+@router.patch("/sites/{site_id}")
+def update_site(
+    site_id: int,
+    payload: SiteConfigIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.SUPER_ADMIN)),
+):
+    row = db.query(Site).filter(Site.id == site_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Site introuvable.")
+    code = payload.code.strip().upper()
+    duplicate = db.query(Site).filter(Site.code == code, Site.id != site_id).first()
+    if duplicate:
+        raise HTTPException(status_code=400, detail="Ce code de site existe déjà.")
+    row.nom = payload.nom.strip()
+    row.code = code
+    row.description = payload.description
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "nom": row.nom, "code": row.code, "description": row.description}
+
+
+@router.delete("/sites/{site_id}")
+def delete_site(
+    site_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.SUPER_ADMIN)),
+):
+    row = db.query(Site).filter(Site.id == site_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Site introuvable.")
+    linked_parent = db.query(Parent).filter(Parent.site_id == row.id).first()
+    if linked_parent:
+        raise HTTPException(status_code=400, detail="Suppression impossible : ce site est utilisé par des parents.")
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/listes-config")
+def list_listes_config(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    rows = db.query(Liste).order_by(Liste.code.asc()).all()
+    return [
+        {
+            "id": l.id,
+            "code": l.code.value,
+            "nom": l.nom,
+            "description": l.description,
+        }
+        for l in rows
+    ]
+
+
+@router.post("/listes-config")
+def create_liste_config(
+    payload: ListeConfigIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.SUPER_ADMIN)),
+):
+    exists = db.query(Liste).filter(Liste.code == payload.code).first()
+    if exists:
+        raise HTTPException(status_code=400, detail="Ce code de liste existe déjà.")
+    row = Liste(code=payload.code, nom=payload.nom, description=payload.description)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "code": row.code.value, "nom": row.nom, "description": row.description}
+
+
+@router.patch("/listes-config/{liste_id}")
+def update_liste_config(
+    liste_id: int,
+    payload: ListeConfigIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.SUPER_ADMIN)),
+):
+    row = db.query(Liste).filter(Liste.id == liste_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Liste introuvable.")
+    duplicate = db.query(Liste).filter(Liste.code == payload.code, Liste.id != liste_id).first()
+    if duplicate:
+        raise HTTPException(status_code=400, detail="Ce code de liste existe déjà.")
+    row.code = payload.code
+    row.nom = payload.nom
+    row.description = payload.description
+    db.commit()
+    db.refresh(row)
+    return {"id": row.id, "code": row.code.value, "nom": row.nom, "description": row.description}
+
+
+@router.delete("/listes-config/{liste_id}")
+def delete_liste_config(
+    liste_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles(UserRole.SUPER_ADMIN)),
+):
+    row = db.query(Liste).filter(Liste.id == liste_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Liste introuvable.")
+    has_demandes = db.query(DemandeInscription).filter(DemandeInscription.liste_id == row.id).first()
+    if has_demandes:
+        raise HTTPException(status_code=400, detail="Suppression impossible : cette liste est déjà utilisée.")
+    db.delete(row)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/listes/{liste_code}/demandes")
