@@ -51,6 +51,7 @@ interface ParentUserUI {
 
 export default function GestionUtilisateurs() {
   const { token } = useAuth();
+  const DEFAULT_PARENT_PASSWORD = 'Passer123';
   const [rawUsers, setRawUsers] = useState<ApiUser[]>([]);
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -68,7 +69,6 @@ export default function GestionUtilisateurs() {
   const [newParentPrenom, setNewParentPrenom] = useState('');
   const [newParentNom, setNewParentNom] = useState('');
   const [newParentService, setNewParentService] = useState('');
-  const [newParentPassword, setNewParentPassword] = useState('');
   const [newParentEmail, setNewParentEmail] = useState('');
   const [newParentTelephone, setNewParentTelephone] = useState('');
   const [newParentSite, setNewParentSite] = useState('');
@@ -293,7 +293,10 @@ export default function GestionUtilisateurs() {
 
   const handleCreateParent = async () => {
     if (!token) return;
-    if (!newParentMatricule || !newParentPrenom || !newParentNom || !newParentService) return;
+    if (!newParentMatricule || !newParentPrenom || !newParentNom || !newParentService || !newParentSite || !newParentTelephone) {
+      toast({ title: 'Champs requis', description: 'Tous les champs sont obligatoires sauf l’email.', variant: 'destructive' });
+      return;
+    }
     try {
       await apiRequest('/admin/users', {
         method: 'POST',
@@ -307,11 +310,11 @@ export default function GestionUtilisateurs() {
           nom: newParentNom,
           service: newParentService,
           site_code: newParentSite || null,
-          password: newParentPassword,
+          password: DEFAULT_PARENT_PASSWORD,
         }),
       });
       setCreateParentOpen(false);
-      setNewParentMatricule(''); setNewParentPrenom(''); setNewParentNom(''); setNewParentService(''); setNewParentPassword(''); setNewParentEmail(''); setNewParentTelephone(''); setNewParentSite('');
+      setNewParentMatricule(''); setNewParentPrenom(''); setNewParentNom(''); setNewParentService(''); setNewParentEmail(''); setNewParentTelephone(''); setNewParentSite('');
       await loadUsers();
       toast({ title: '✅ Parent créé' });
     } catch (error) {
@@ -585,18 +588,22 @@ export default function GestionUtilisateurs() {
         <DialogContent className="sm:max-w-md rounded-xl">
           <DialogHeader><DialogTitle>Nouveau parent / Agent CSS</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div className="space-y-2"><Label>Matricule</Label><Input value={newParentMatricule} onChange={e => setNewParentMatricule(e.target.value)} placeholder="CSS-2024-XXX" className="rounded-lg" /></div>
+            <div className="space-y-2"><Label>Matricule *</Label><Input value={newParentMatricule} onChange={e => setNewParentMatricule(e.target.value)} placeholder="CSS-2024-XXX" className="rounded-lg" /></div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Prénom</Label><Input value={newParentPrenom} onChange={e => setNewParentPrenom(e.target.value)} className="rounded-lg" /></div>
-              <div className="space-y-2"><Label>Nom</Label><Input value={newParentNom} onChange={e => setNewParentNom(e.target.value)} className="rounded-lg" /></div>
+              <div className="space-y-2"><Label>Prénom *</Label><Input value={newParentPrenom} onChange={e => setNewParentPrenom(e.target.value)} className="rounded-lg" /></div>
+              <div className="space-y-2"><Label>Nom *</Label><Input value={newParentNom} onChange={e => setNewParentNom(e.target.value)} className="rounded-lg" /></div>
             </div>
-            <div className="space-y-2"><Label>Service</Label><Input value={newParentService} onChange={e => setNewParentService(e.target.value)} className="rounded-lg" /></div>
-            <div className="space-y-2"><Label>Site</Label><Input value={newParentSite} onChange={e => setNewParentSite(e.target.value)} placeholder="Code du site (ex: VDN)" className="rounded-lg" /></div>
+            <div className="space-y-2"><Label>Service *</Label><Input value={newParentService} onChange={e => setNewParentService(e.target.value)} className="rounded-lg" /></div>
+            <div className="space-y-2"><Label>Site *</Label><Input value={newParentSite} onChange={e => setNewParentSite(e.target.value)} placeholder="Code du site (ex: VDN)" className="rounded-lg" /></div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Email</Label><Input value={newParentEmail} onChange={e => setNewParentEmail(e.target.value)} type="email" className="rounded-lg" /></div>
-              <div className="space-y-2"><Label>Téléphone</Label><Input value={newParentTelephone} onChange={e => setNewParentTelephone(e.target.value)} className="rounded-lg" /></div>
+              <div className="space-y-2"><Label>Téléphone *</Label><Input value={newParentTelephone} onChange={e => setNewParentTelephone(e.target.value)} className="rounded-lg" /></div>
             </div>
-            <div className="space-y-2"><Label>Mot de passe</Label><Input value={newParentPassword} onChange={e => setNewParentPassword(e.target.value)} type="password" className="rounded-lg" /></div>
+            <div className="bg-primary/5 border border-primary/20 rounded-lg p-3">
+              <p className="text-xs text-muted-foreground">
+                <strong className="text-primary">ℹ️ Note :</strong> Le mot de passe initial du parent est <strong>Passer123</strong>. À la première connexion, le parent devra le changer obligatoirement.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateParentOpen(false)} className="rounded-lg">Annuler</Button>
