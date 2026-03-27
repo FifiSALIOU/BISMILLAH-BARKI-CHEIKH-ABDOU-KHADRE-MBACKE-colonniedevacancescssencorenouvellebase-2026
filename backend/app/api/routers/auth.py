@@ -30,9 +30,7 @@ def login_parent(payload: ParentLoginRequest, db: Session = Depends(get_db)) -> 
     if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Matricule ou mot de passe incorrect.")
     token = create_access_token(subject=str(user.id), role=user.role.value)
-    # Flux parent inchangé: obligation uniquement si le parent est encore sur le mot de passe par défaut.
-    must_change_password = verify_password(DEFAULT_PARENT_PASSWORD, user.password_hash)
-    return TokenResponse(access_token=token, must_change_password=must_change_password)
+    return TokenResponse(access_token=token, must_change_password=user.must_change_password)
 
 
 @router.post("/login-admin", response_model=TokenResponse)

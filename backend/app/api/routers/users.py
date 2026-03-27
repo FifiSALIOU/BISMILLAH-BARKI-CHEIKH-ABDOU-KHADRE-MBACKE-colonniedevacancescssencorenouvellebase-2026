@@ -35,6 +35,7 @@ from pydantic import ValidationError
 from app.services.email import send_email
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
+DEFAULT_PARENT_PASSWORD = "Passer123"
 
 
 def _generate_temp_password(length: int = 12) -> str:
@@ -104,10 +105,11 @@ def create_user(
             db=db,
             role=UserRole.PARENT,
             name=p.name,
-            password=p.password,
+            password=DEFAULT_PARENT_PASSWORD,
             email=str(p.email) if p.email else None,
             matricule=p.matricule,
             parent_payload={"prenom": p.prenom, "nom": p.nom, "service": p.service, "site_code": p.site_code},
+            must_change_password=True,
         )
         return UserOut.model_validate(user)
 
