@@ -33,9 +33,18 @@ export default function AdminDashboard() {
     loadStats();
   }, [token]);
 
-  const principale = apiStats?.selected_by_liste?.principale ?? enfants.filter(e => e.liste === 'principale').length;
-  const n1 = apiStats?.selected_by_liste?.attente_n1 ?? enfants.filter(e => e.liste === 'attente_n1').length;
-  const n2 = apiStats?.selected_by_liste?.attente_n2 ?? enfants.filter(e => e.liste === 'attente_n2').length;
+  const getSelectedCount = (codeUpper: 'PRINCIPALE' | 'ATTENTE_N1' | 'ATTENTE_N2', codeLower: 'principale' | 'attente_n1' | 'attente_n2') => {
+    if (!apiStats?.selected_by_liste) return undefined;
+    const valueUpper = apiStats.selected_by_liste[codeUpper];
+    if (typeof valueUpper === 'number') return valueUpper;
+    const valueLower = apiStats.selected_by_liste[codeLower];
+    if (typeof valueLower === 'number') return valueLower;
+    return undefined;
+  };
+
+  const principale = getSelectedCount('PRINCIPALE', 'principale') ?? enfants.filter(e => e.liste === 'principale').length;
+  const n1 = getSelectedCount('ATTENTE_N1', 'attente_n1') ?? enfants.filter(e => e.liste === 'attente_n1').length;
+  const n2 = getSelectedCount('ATTENTE_N2', 'attente_n2') ?? enfants.filter(e => e.liste === 'attente_n2').length;
   const total = apiStats?.total_demandes ?? enfants.length;
   const totalParents = new Set(enfants.map(e => e.parentMatricule)).size;
   const listeFinale = getListeFinale();
