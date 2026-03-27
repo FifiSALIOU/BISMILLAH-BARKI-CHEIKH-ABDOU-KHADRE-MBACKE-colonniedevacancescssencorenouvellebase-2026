@@ -23,7 +23,7 @@ export interface EntityConfig {
 interface EntityOption {
   value: string;
   config: EntityConfig;
-  onImport: (data: any[]) => ImportResult;
+  onImport: (data: any[]) => ImportResult | Promise<ImportResult>;
 }
 
 interface Props {
@@ -76,18 +76,25 @@ export default function ImportExcel({ open, onOpenChange, entities, singleEntity
     reader.readAsArrayBuffer(file);
   };
 
-  const handleImport = () => {
+  const [importing, setImporting] = useState(false);
+
+  const handleImport = async () => {
     if (!currentEntity) return;
     const normalized = previewData.map(row => {
       const n: any = {};
       Object.keys(row).forEach(k => { n[k.toLowerCase().trim()] = String(row[k]).trim(); });
       return n;
     });
-    const res = currentEntity.onImport(normalized);
-    setResult(res);
-    setStep('result');
-    if (res.success > 0) toast({ title: `✅ ${res.success} ${currentEntity.config.label} importé(s)` });
-    if (res.errors.length > 0) toast({ title: `⚠️ ${res.errors.length} erreur(s)`, variant: 'destructive' });
+    setImporting(true);
+    try {
+      const res = await currentEntity.onImport(normalized);
+      setResult(res);
+      setStep('result');
+      if (res.success > 0) toast({ title: `✅ ${res.success} ${currentEntity.config.label} importé(s)` });
+      if (res.errors.length > 0) toast({ title: `⚠️ ${res.errors.length} erreur(s)`, variant: 'destructive' });
+    } finally {
+      setImporting(false);
+    }
   };
 
   const handleDownloadTemplate = () => {
@@ -210,7 +217,7 @@ export default function ImportExcel({ open, onOpenChange, entities, singleEntity
           {step === 'preview' && (
             <>
               <Button variant="outline" onClick={reset} className="rounded-lg">Retour</Button>
-              <Button onClick={handleImport} className="rounded-lg bg-primary text-primary-foreground gap-2"><Upload className="w-4 h-4" />Importer {previewData.length} ligne(s)</Button>
+              <Button onClick={handleImport} disabled={importing} className="rounded-lg bg-primary text-primary-foreground gap-2"><Upload className="w-4 h-4" />{importing ? 'Import en cours...' : `Importer ${previewData.length} ligne(s)`}</Button>
             </>
           )}
           {step === 'result' && (

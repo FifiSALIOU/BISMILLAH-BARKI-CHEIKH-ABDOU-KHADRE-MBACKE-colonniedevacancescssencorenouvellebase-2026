@@ -64,11 +64,15 @@ def list_users(
             "parent_prenom": None,
             "parent_nom": None,
             "parent_service": None,
+            "parent_site_code": None,
+            "parent_telephone": None,
         }
         if u.role == UserRole.PARENT and u.parent_profile:
             payload["parent_prenom"] = u.parent_profile.prenom
             payload["parent_nom"] = u.parent_profile.nom
             payload["parent_service"] = u.parent_profile.service.nom if u.parent_profile.service else None
+            payload["parent_site_code"] = u.parent_profile.site.code if u.parent_profile.site else None
+            payload["parent_telephone"] = u.parent_profile.telephone
         out.append(UserOut.model_validate(payload))
     return out
 

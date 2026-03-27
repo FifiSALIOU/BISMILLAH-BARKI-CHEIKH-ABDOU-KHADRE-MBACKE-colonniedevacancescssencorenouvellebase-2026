@@ -52,18 +52,33 @@ export default function GestionListesConfig() {
     loadListes();
   }, [token]);
 
-  const handleImportListes = (data: any[]) => {
+  const handleImportListes = async (data: any[]) => {
     let success = 0;
     const errors: { ligne: number; message: string }[] = [];
+    if (!token) {
+      return { success, errors: [{ ligne: 1, message: "Token d'authentification manquant." }] };
+    }
     const validCodes = CODE_OPTIONS.map(o => o.value);
-    data.forEach((row, i) => {
-      if (!row.code || !row.nom) { errors.push({ ligne: i + 2, message: 'Champs obligatoires manquants (code, nom)' }); return; }
-      const code = row.code.toUpperCase().trim();
-      if (!validCodes.includes(code)) { errors.push({ ligne: i + 2, message: `Code invalide "${row.code}" (${validCodes.join(', ')})` }); return; }
-      if (listes.some(l => l.code === code)) { errors.push({ ligne: i + 2, message: `Code "${code}" déjà existant` }); return; }
-      setListes(prev => [...prev, { id: `tmp_${Date.now()}_${i}`, code, nom: row.nom, description: row.description || '' }]);
-      success++;
-    });
+    const existingCodes = new Set(listes.map(l => l.code));
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      if (!row.code || !row.nom) { errors.push({ ligne: i + 2, message: 'Champs obligatoires manquants (code, nom)' }); continue; }
+      const code = String(row.code).toUpperCase().trim();
+      if (!validCodes.includes(code)) { errors.push({ ligne: i + 2, message: `Code invalide "${row.code}" (${validCodes.join(', ')})` }); continue; }
+      if (existingCodes.has(code)) { errors.push({ ligne: i + 2, message: `Code "${code}" déjà existant` }); continue; }
+      try {
+        await apiRequest('/admin/listes-config', {
+          method: 'POST',
+          token,
+          body: JSON.stringify({ code, nom: row.nom, description: row.description || null }),
+        });
+        existingCodes.add(code);
+        success++;
+      } catch (error) {
+        errors.push({ ligne: i + 2, message: error instanceof Error ? error.message : 'Échec de création de la liste' });
+      }
+    }
+    await loadListes();
     return { success, errors };
   };
 

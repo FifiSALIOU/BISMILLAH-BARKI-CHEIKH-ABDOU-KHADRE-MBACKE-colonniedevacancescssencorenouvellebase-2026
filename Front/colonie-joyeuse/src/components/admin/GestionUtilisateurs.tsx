@@ -24,6 +24,8 @@ interface ApiUser {
   parent_prenom?: string | null;
   parent_nom?: string | null;
   parent_service?: string | null;
+  parent_site_code?: string | null;
+  parent_telephone?: string | null;
 }
 
 interface AdminUserUI {
@@ -43,6 +45,8 @@ interface ParentUserUI {
   nom: string;
   service: string;
   email?: string;
+  site?: string;
+  telephone?: string;
 }
 
 export default function GestionUtilisateurs() {
@@ -106,6 +110,8 @@ export default function GestionUtilisateurs() {
       nom: u.parent_nom || '',
       service: u.parent_service || '',
       email: u.email || undefined,
+      site: u.parent_site_code || undefined,
+      telephone: u.parent_telephone || undefined,
     }));
 
   const loadUsers = async () => {
@@ -125,43 +131,88 @@ export default function GestionUtilisateurs() {
     loadUsers();
   }, [token]);
 
-  const handleImportParents = (data: any[]) => {
+  const handleImportParents = async (data: any[]) => {
     let success = 0;
     const errors: { ligne: number; message: string }[] = [];
-    data.forEach((row, i) => {
+    if (!token) {
+      return { success, errors: [{ ligne: 1, message: "Token d'authentification manquant." }] };
+    }
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
       if (!row.matricule || !row.prenom || !row.nom || !row.service) {
-        errors.push({ ligne: i + 2, message: 'Champs obligatoires manquants (matricule, prenom, nom, service)' });
-        return;
+        errors.push({ ligne: i + 2, message: 'Champs obligatoires manquants (matricule, prenom, nom, service, password)' });
+        continue;
+      }
+      if (!row.password || String(row.password).length < 8) {
+        errors.push({ ligne: i + 2, message: 'Le mot de passe est obligatoire (min 8 caractères).' });
+        continue;
       }
       if (parents.some(p => p.matricule === row.matricule)) {
         errors.push({ ligne: i + 2, message: `Matricule "${row.matricule}" déjà existant` });
-        return;
+        continue;
       }
-      // Import will be persisted when users are created via API one-by-one.
-      success++;
-    });
+      try {
+        await apiRequest('/admin/users', {
+          method: 'POST',
+          token,
+          body: JSON.stringify({
+            role: 'PARENT',
+            name: `${row.prenom} ${row.nom}`.trim(),
+            email: row.email || null,
+            matricule: row.matricule,
+            prenom: row.prenom,
+            nom: row.nom,
+            service: row.service,
+            site_code: row.site || null,
+            password: row.password,
+          }),
+        });
+        success++;
+      } catch (error) {
+        errors.push({ ligne: i + 2, message: error instanceof Error ? error.message : "Échec de création du parent" });
+      }
+    }
+    await loadUsers();
     return { success, errors };
   };
 
-  const handleImportAdmins = (data: any[]) => {
+  const handleImportAdmins = async (data: any[]) => {
     let success = 0;
     const errors: { ligne: number; message: string }[] = [];
-    data.forEach((row, i) => {
+    if (!token) {
+      return { success, errors: [{ ligne: 1, message: "Token d'authentification manquant." }] };
+    }
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
       if (!row.email || !row.prenom || !row.nom || !row.role) {
         errors.push({ ligne: i + 2, message: 'Champs obligatoires manquants (email, prenom, nom, role)' });
-        return;
+        continue;
       }
-      const role = row.role.toLowerCase().trim();
+      const role = String(row.role).toLowerCase().trim();
       if (role !== 'gestionnaire' && role !== 'super_admin') {
         errors.push({ ligne: i + 2, message: `Rôle invalide "${row.role}" (gestionnaire ou super_admin)` });
-        return;
+        continue;
       }
       if (admins.some(a => a.email === row.email)) {
         errors.push({ ligne: i + 2, message: `Email "${row.email}" déjà existant` });
-        return;
+        continue;
       }
-      success++;
-    });
+      try {
+        await apiRequest('/admin/users', {
+          method: 'POST',
+          token,
+          body: JSON.stringify({
+            role: role.toUpperCase(),
+            name: `${row.prenom} ${row.nom}`.trim(),
+            email: row.email,
+          }),
+        });
+        success++;
+      } catch (error) {
+        errors.push({ ligne: i + 2, message: error instanceof Error ? error.message : "Échec de création de l'admin" });
+      }
+    }
+    await loadUsers();
     return { success, errors };
   };
 
@@ -273,24 +324,46 @@ export default function GestionUtilisateurs() {
     setEditParentOpen(false);
   };
 
-  const handleCSVUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCSVUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const text = evt.target?.result as string;
-      const lines = text.split('\n').slice(1);
-      let count = 0;
-      lines.forEach(line => {
-        const [matricule, prenom, nom, service] = line.split(',').map(s => s.trim());
-        if (matricule && prenom && nom && service) {
-          // CSV local parser kept for validation; persistence is API-driven.
-          count++;
-        }
-      });
-      toast({ title: `✅ ${count} parent(s) importé(s)` });
-    };
-    reader.readAsText(file);
+    if (!token) {
+      toast({ title: 'Import impossible', description: "Token d'authentification manquant.", variant: 'destructive' });
+      return;
+    }
+    const text = await file.text();
+    const lines = text.split('\n').slice(1);
+    let count = 0;
+    let errors = 0;
+    for (const line of lines) {
+      const [matricule, prenom, nom, service, email, site_code, password] = line.split(',').map(s => s.trim());
+      if (!matricule || !prenom || !nom || !service || !password || password.length < 8) {
+        errors++;
+        continue;
+      }
+      try {
+        await apiRequest('/admin/users', {
+          method: 'POST',
+          token,
+          body: JSON.stringify({
+            role: 'PARENT',
+            name: `${prenom} ${nom}`.trim(),
+            email: email || null,
+            matricule,
+            prenom,
+            nom,
+            service,
+            site_code: site_code || null,
+            password,
+          }),
+        });
+        count++;
+      } catch {
+        errors++;
+      }
+    }
+    await loadUsers();
+    toast({ title: `✅ ${count} parent(s) importé(s)`, description: errors > 0 ? `${errors} ligne(s) en erreur.` : undefined, variant: errors > 0 ? 'destructive' : 'default' });
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -422,7 +495,7 @@ export default function GestionUtilisateurs() {
           </div>
           <div className="bg-accent/5 border border-accent/20 rounded-lg p-3">
             <p className="text-xs text-muted-foreground">
-              <strong className="text-accent">📄 Format CSV :</strong> matricule, prenom, nom, service (une ligne par parent, avec en-tête).
+              <strong className="text-accent">📄 Format CSV :</strong> matricule, prenom, nom, service, email, site_code, password (mot de passe min 8 caractères).
             </p>
           </div>
         </TabsContent>
@@ -562,7 +635,7 @@ export default function GestionUtilisateurs() {
         open={importExcelOpen}
         onOpenChange={setImportExcelOpen}
         entities={[
-          { value: 'parents', config: { label: 'Parents / Agents CSS', colonnes: ['matricule', 'prenom', 'nom', 'service', 'site', 'email', 'telephone'], description: 'Colonnes requises : matricule, prenom, nom, service. Optionnelles : site, email, telephone.' }, onImport: handleImportParents },
+          { value: 'parents', config: { label: 'Parents / Agents CSS', colonnes: ['matricule', 'prenom', 'nom', 'service', 'site', 'email', 'password'], description: 'Colonnes requises : matricule, prenom, nom, service, password. Optionnelles : site, email.' }, onImport: handleImportParents },
           { value: 'admins', config: { label: 'Administrateurs', colonnes: ['email', 'prenom', 'nom', 'role', 'telephone'], description: 'Colonnes requises : email, prenom, nom, role (gestionnaire ou super_admin). Optionnelle : telephone.' }, onImport: handleImportAdmins },
         ]}
       />

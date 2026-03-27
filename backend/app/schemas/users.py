@@ -17,6 +17,8 @@ class UserOut(BaseModel):
     parent_prenom: Optional[str] = None
     parent_nom: Optional[str] = None
     parent_service: Optional[str] = None
+    parent_site_code: Optional[str] = None
+    parent_telephone: Optional[str] = None
 
     class Config:
         from_attributes = True

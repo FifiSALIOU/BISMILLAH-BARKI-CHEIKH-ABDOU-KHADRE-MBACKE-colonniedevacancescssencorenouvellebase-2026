@@ -46,18 +46,31 @@ export default function GestionSites() {
     loadSites();
   }, [token]);
 
-  const handleImportSites = (data: any[]) => {
+  const handleImportSites = async (data: any[]) => {
     let success = 0;
     const errors: { ligne: number; message: string }[] = [];
+    if (!token) {
+      return { success, errors: [{ ligne: 1, message: "Token d'authentification manquant." }] };
+    }
     const existingCodes = new Set(sites.map(s => s.code));
-    data.forEach((row, i) => {
-      if (!row.nom || !row.code) { errors.push({ ligne: i + 2, message: 'Champs obligatoires manquants (nom, code)' }); return; }
-      const code = row.code.toUpperCase().replace(/\s/g, '');
-      if (existingCodes.has(code)) { errors.push({ ligne: i + 2, message: `Code "${code}" déjà existant` }); return; }
-      existingCodes.add(code);
-      setSites(prev => [...prev, { id: `tmp_${Date.now()}_${i}`, nom: row.nom, code, description: row.description || '' }]);
-      success++;
-    });
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      if (!row.nom || !row.code) { errors.push({ ligne: i + 2, message: 'Champs obligatoires manquants (nom, code)' }); continue; }
+      const code = String(row.code).toUpperCase().replace(/\s/g, '');
+      if (existingCodes.has(code)) { errors.push({ ligne: i + 2, message: `Code "${code}" déjà existant` }); continue; }
+      try {
+        await apiRequest('/admin/sites', {
+          method: 'POST',
+          token,
+          body: JSON.stringify({ nom: row.nom, code, description: row.description || null }),
+        });
+        existingCodes.add(code);
+        success++;
+      } catch (error) {
+        errors.push({ ligne: i + 2, message: error instanceof Error ? error.message : "Échec de création de l'agence" });
+      }
+    }
+    await loadSites();
     return { success, errors };
   };
 
