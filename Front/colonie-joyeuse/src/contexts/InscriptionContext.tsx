@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Enfant, AppSettings, Parent, HistoriqueEntry } from '@/data/mockData';
+import { useAuth } from '@/contexts/AuthContext';
+import { apiRequest } from '@/lib/api';
 
 interface InscriptionContextType {
   enfants: Enfant[];
@@ -47,10 +49,108 @@ const EMPTY_SETTINGS: AppSettings = {
 };
 
 export function InscriptionProvider({ children }: { children: ReactNode }) {
+  const { token, role, parent: authParent } = useAuth();
   const [enfants, setEnfants] = useState<Enfant[]>([]);
   const [parents, setParents] = useState<Parent[]>([]);
   const [settings, setSettings] = useState<AppSettings>({ ...EMPTY_SETTINGS });
   const [historique, setHistorique] = useState<HistoriqueEntry[]>([]);
+
+  useEffect(() => {
+    const loadRuntimeSettings = async () => {
+      if (!token) return;
+      try {
+        const runtime = await apiRequest<Partial<AppSettings>>('/admin/settings', { token });
+        setSettings(prev => ({
+          ...prev,
+          ...runtime,
+          accesParentsActif: runtime.accesParentsActif ?? true,
+        }));
+      } catch {
+        // Keep local defaults if API read fails.
+      }
+    };
+    loadRuntimeSettings();
+  }, [token]);
+
+  useEffect(() => {
+    const loadParentDemandes = async () => {
+      if (!token || role !== 'parent' || !authParent?.matricule) return;
+      try {
+        const demandes = await apiRequest<Array<{
+          id: number;
+          liste_code: string;
+          date_inscription: string;
+          statut: string;
+          non_validation_reason?: string | null;
+          enfant_id: number;
+          enfant_prenom: string;
+          enfant_nom: string;
+          enfant_date_naissance: string;
+          enfant_sexe: string;
+          enfant_lien_parente: string;
+          enfant_is_titulaire: boolean;
+        }>>('/parents/demandes', { token });
+
+        const mapListe = (value: string): Enfant['liste'] => {
+          const v = String(value || '').toUpperCase();
+          if (v === 'PRINCIPALE') return 'principale';
+          if (v === 'ATTENTE_N1') return 'attente_n1';
+          return 'attente_n2';
+        };
+
+        const mapStatut = (liste: Enfant['liste']): Enfant['statut'] => {
+          if (liste === 'principale') return 'Titulaire';
+          if (liste === 'attente_n1') return 'Suppléant N1';
+          return 'Suppléant N2';
+        };
+
+        const mapLien = (value: string): Enfant['lienParente'] => {
+          const v = String(value || '').toUpperCase();
+          if (v === 'PERE') return 'Père';
+          if (v === 'MERE') return 'Mère';
+          if (v === 'TUTEUR_LEGAL') return 'Tuteur légal';
+          return 'Autre';
+        };
+
+        const mapped: Enfant[] = demandes.map(d => {
+          const liste = mapListe(d.liste_code);
+          return {
+            id: String(d.enfant_id || d.id),
+            parentMatricule: authParent.matricule,
+            prenom: d.enfant_prenom,
+            nom: d.enfant_nom,
+            dateNaissance: d.enfant_date_naissance,
+            sexe: String(d.enfant_sexe || '').toUpperCase() === 'F' ? 'F' : 'M',
+            lienParente: mapLien(d.enfant_lien_parente),
+            liste,
+            statut: mapStatut(liste),
+            dateInscription: d.date_inscription,
+            validation: d.statut === 'NON_VALIDEE' ? 'refusé' : d.statut === 'RETENUE' ? 'validé' : 'en_attente',
+            motifRefus: d.non_validation_reason || undefined,
+          };
+        });
+
+        setEnfants(mapped);
+        setParents(prev => {
+          const exists = prev.some(p => p.matricule === authParent.matricule);
+          if (exists) return prev;
+          return [
+            ...prev,
+            {
+              matricule: authParent.matricule,
+              prenom: authParent.prenom,
+              nom: authParent.nom,
+              service: authParent.service,
+              motDePasse: '',
+            },
+          ];
+        });
+      } catch {
+        // Keep existing state when parent demandes API fails.
+      }
+    };
+    loadParentDemandes();
+  }, [token, role, authParent?.matricule]);
 
   const updateSettings = (s: Partial<AppSettings>) => {
     setSettings(prev => ({ ...prev, ...s }));
